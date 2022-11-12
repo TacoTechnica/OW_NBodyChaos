@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ow-mods/owml/master/schemas/manifest_schema.json",
+  "filename": "NBodyChaos.dll",
+  "author": "TacoTechnica",
+  "name": "N Body Chaos",
+  "uniqueName": "TacoTechnica.NBodyChaos",
+  "version": "0.2.0",
+  "owmlVersion": "2.7.3",
+  "conflicts": [ "xen.NewHorizons" ]
+}
