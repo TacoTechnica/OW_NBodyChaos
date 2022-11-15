@@ -1,3 +1,26 @@
 {
-  "enabled": true
+  "enabled": true,
+  "settings": {
+    "sunGravity" : {
+      "type": "toggle",
+      "value": true,
+      "yes": "On",
+      "no": "Off",
+      "title": "Gravity affects Sun?"
+    },
+    "sunSpawnGravityExponent" : {
+      "type": "slider",
+      "value": "1",
+      "min": 1,
+      "max": 2,
+      "title": "Sun Gravity Exponent (Start of loop only)"
+    },
+    "sunSpawnGravityMultiplier" : {
+      "type": "slider",
+      "value": "0.4",
+      "min": 0.2,
+      "max": 1.4,
+      "title": "Sun Gravity Multiplier (Start of loop only)"
+    }
+  }
 }

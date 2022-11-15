@@ -97,7 +97,7 @@ public static class SearchUtilities
         /// </summary>
         public static GameObject Find(string path, bool warn = true)
         {
-            if (CachedGameObjects.TryGetValue(path, out var go)) return go;
+            if (CachedGameObjects.TryGetValue(path, out var go) && go != null) return go;
 
             // 1: normal find
             go = GameObject.Find(path);
