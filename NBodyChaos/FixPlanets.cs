@@ -251,7 +251,26 @@ public static class FixPlanets
             fluidDetector._collider = collider;
             forceApplier._fluidDetector = fluidDetector;
             forceApplier._applyFluids = true;
+            fluidDetector._buoyancy.boundingRadius = radius;
+            // Make sure our drag curve makes sense, copy an island...
+            CopyIslandBuoyancyTo(fluidDetector);
         }
+    }
+
+    private static void CopyBuoyancyTo(DynamicFluidDetector target, DynamicFluidDetector toCopy)
+    {
+        target._dragFactor = toCopy._dragFactor;
+        target._angularDragFactor = toCopy._angularDragFactor;
+        var buoyancyToCopy = toCopy._buoyancy;
+        target._buoyancy.density = buoyancyToCopy.density;
+        target._buoyancy.dragCurve = buoyancyToCopy.dragCurve;
+        target._buoyancy.submergeCurve = buoyancyToCopy.submergeCurve;
+    }
+
+    private static void CopyIslandBuoyancyTo(DynamicFluidDetector target)
+    {
+        CopyBuoyancyTo(target, SearchUtilities.Find("GabbroIsland_Body/Detector_GabbroIsland")
+            .GetComponent<DynamicFluidDetector>());
     }
 
     private static void FixBrittleHollowFragments(string bhSectorsPath, string bhStreamingGroupPath)
@@ -286,15 +305,22 @@ public static class FixPlanets
 
         var newShape = dynamicDetectors.AddComponent<SphereShape>();
 
-        dynamicFluidDetector._shape = newShape;
 
         var sphereCollider = dynamicDetectors.GetComponent<SphereCollider>();
         var owCollider = dynamicDetectors.GetComponent<OWCollider>();
         owCollider._parentBody = meteor.owRigidbody;
         newShape.radius = sphereCollider.radius;
 
+        dynamicFluidDetector._shape = newShape;
+        dynamicFluidDetector._buoyancy.boundingRadius = sphereCollider.radius;
+
+        // Match the 
+        CopyIslandBuoyancyTo(dynamicFluidDetector);
+
+        
         var upperForceApplier = constantDetectors.GetComponent<ForceApplier>();
         upperForceApplier._fluidDetector = dynamicFluidDetector;
+        upperForceApplier._applyFluids = true;
     }
 
     private static void FixSatelliteSector(string satelliteSectorPath, string parentStreamingGroupPath,
