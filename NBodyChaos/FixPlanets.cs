@@ -120,17 +120,6 @@ public static class FixPlanets
             renderer.enabled = true;
         }
 
-        // Make the LAST fluid cylinder extend to the BOTTOM of ash twin
-        foreach (Transform child in sandFunnelBody.GetComponentInChildren<CompoundShape>(true).transform)
-        {
-            if (child.name == "FluidCylinder" && child.localPosition.z < 100)
-            {
-                var copy = child.localPosition;
-                copy.z = 0;
-                child.localPosition = copy;
-            }
-        }
-
         var pointer = sandFunnelBody.AddComponent<SandFunnelPointer>();
         pointer.AshTwin = ashTwinBody;
         pointer.EmberTwin = emberTwinBody;
@@ -138,6 +127,7 @@ public static class FixPlanets
         // Tweak these
         pointer.DistanceScaleFactor = 0.002f;
         pointer.DistanceScaleOffset = 0f;
+        pointer.DistancePositionFactor = 0.062f;
     }
 
     private static void FixVolcanicMoon(string destructionVolumePath)
@@ -303,16 +293,24 @@ public static class FixPlanets
         dynamicFluidDetector._dontApplyForces = false;
         meteor._primaryFluidDetector = dynamicFluidDetector;
 
-        var newShape = dynamicDetectors.AddComponent<SphereShape>();
+        var shape = dynamicDetectors.GetComponent<SphereShape>();
+        if (shape == null)
+        {
+            shape = dynamicDetectors.AddComponent<SphereShape>();
+        }
 
 
         var sphereCollider = dynamicDetectors.GetComponent<SphereCollider>();
         var owCollider = dynamicDetectors.GetComponent<OWCollider>();
         owCollider._parentBody = meteor.owRigidbody;
-        newShape.radius = sphereCollider.radius;
+        shape.radius = sphereCollider.radius;
 
-        dynamicFluidDetector._shape = newShape;
+        dynamicFluidDetector._shape = shape;
         dynamicFluidDetector._buoyancy.boundingRadius = sphereCollider.radius;
+
+        var forceApplier = constantDetectors.GetComponent<ForceApplier>();
+        forceApplier._fluidDetector = dynamicFluidDetector;
+        forceApplier._applyFluids = true;
 
         // Match the 
         CopyIslandBuoyancyTo(dynamicFluidDetector);
@@ -515,11 +513,35 @@ public static class FixPlanets
         }
     }
 
-    [HarmonyPatch(typeof(MeteorController), "Awake")]
+    [HarmonyPatch(typeof(MeteorController), "Initialize")]
     [HarmonyPostfix]
     private static void FixMeteorOnInit(MeteorController __instance)
     {
         FixHollowLanternMeteor(__instance);
+    }
+
+    [HarmonyPatch(typeof(ForceDetector), "AccumulateAcceleration")]
+    [HarmonyPrefix]
+    private static void PreventDoubleCountingForces(ForceDetector __instance)
+    {
+        __instance._activeVolumes = __instance._activeVolumes.Distinct().ToList();
+
+        // Totally radical assumption: NO INHERITANCE
+        __instance._activeInheritedDetector = null;
+
+        if (__instance is DynamicForceDetector dynamicForceDetector)
+        {
+            if (dynamicForceDetector._activeVolumes.Contains(dynamicForceDetector._inheritedVolume))
+            {
+                dynamicForceDetector._inheritedVolume = null;
+            }
+        }
+    }
+    [HarmonyPatch(typeof(AlignmentForceDetector), "AccumulateAcceleration")]
+    [HarmonyPrefix]
+    private static void PreventDoubleCountingInheritedAcceleration2(AlignmentForceDetector __instance)
+    {
+        PreventDoubleCountingForces(__instance);
     }
 
     private class JankShapeFixer : MonoBehaviour
@@ -544,6 +566,8 @@ public static class FixPlanets
         public GameObject SandFunnel;
         public float DistanceScaleOffset;
         public float DistanceScaleFactor;
+        public float DistancePositionOffset;
+        public float DistancePositionFactor;
 
         private void Update()
         {
@@ -552,6 +576,8 @@ public static class FixPlanets
                 SandFunnel.transform.position = AshTwin.transform.position;
                 Vector3 delta = EmberTwin.transform.position - AshTwin.transform.position;
                 SandFunnel.transform.rotation = Quaternion.LookRotation(delta.normalized, SandFunnel.transform.up);
+                SandFunnel.transform.position -= SandFunnel.transform.forward *
+                                                 (DistancePositionOffset + delta.magnitude * DistancePositionFactor);
                 var scale = SandFunnel.transform.localScale;
                 scale.z = DistanceScaleOffset + delta.magnitude * DistanceScaleFactor;
                 SandFunnel.transform.localScale = scale;

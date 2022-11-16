@@ -44,8 +44,15 @@ public static class FixOrbitLines
         public float LineWidth;
         public float MaxLineWidth;
 
+        private Color _startColor, _endColor;
+        private static readonly Color Alpha = new Color(0, 0, 0, 0);
         private void Start()
         {
+            if (TrailRenderer != null)
+            {
+                _startColor = TrailRenderer.startColor;
+                _endColor = TrailRenderer.endColor;
+            }
             GlobalMessenger.AddListener("EnterMapView", OnEnterMapView);
             GlobalMessenger.AddListener("ExitMapView", OnExitMapView);
             enabled = false;
@@ -58,12 +65,20 @@ public static class FixOrbitLines
 
         private void OnEnable()
         {
-            TrailRenderer.enabled = true;
+            if (TrailRenderer != null)
+            {
+                TrailRenderer.startColor = _startColor;
+                TrailRenderer.endColor = _endColor;
+            }
         }
 
         private void OnDisable()
         {
-            TrailRenderer.enabled = false;
+            if (TrailRenderer != null)
+            {
+                TrailRenderer.startColor = Alpha;
+                TrailRenderer.endColor = Alpha;
+            }
         }
 
         private void OnEnterMapView()

@@ -17,7 +17,7 @@
     },
     "sunSpawnGravityMultiplier" : {
       "type": "slider",
-      "value": "0.4",
+      "value": "0.8",
       "min": 0.2,
       "max": 1.4,
       "title": "Sun Gravity Multiplier (Start of loop only)"
