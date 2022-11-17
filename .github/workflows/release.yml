@@ -64,6 +64,7 @@ jobs:
 
             - name: Build Mod
               run: dotnet build -c Release
+              working-directory: ${{ env.PROJ_NAME }}
 
             - name: Upload Artifact
               uses: "actions/upload-artifact@v3"
