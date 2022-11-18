@@ -60,7 +60,8 @@ jobs:
               uses: "actions/setup-dotnet@v3"
 
             - name: Remove .csproj.user
-              run:  try   {rm -f ${{ env.PROJ_NAME }}/${{ env.PROJ_NAME }}.csproj.user -WhatIf -ErrorAction Stop } catch {}
+              run:  rm -f ${{ env.PROJ_NAME }}/${{ env.PROJ_NAME }}.csproj.user
+              continue-on-error: true
 
             - name: Build Mod
               run: dotnet build -c Release
