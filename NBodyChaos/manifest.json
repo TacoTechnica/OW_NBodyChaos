@@ -4,7 +4,7 @@
   "author": "TacoTechnica",
   "name": "N Body Chaos",
   "uniqueName": "TacoTechnica.NBodyChaos",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "owmlVersion": "2.7.3",
   "conflicts": [ "xen.NewHorizons" ]
 }
