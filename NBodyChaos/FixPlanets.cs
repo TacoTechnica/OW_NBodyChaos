@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
@@ -13,6 +14,8 @@ public static class FixPlanets
 {
     private static List<GravityVolume> _globalVolumes = new();
     private static List<Shape> _shapesToKeepAlive = new List<Shape>();
+    private static OceanEffectController _gdOceanEffect;
+    private static FluidDetector _referenceFluidSplash;
 
     public static void Init()
     {
@@ -37,14 +40,14 @@ public static class FixPlanets
         }
     }
 
-    public static void AddCollidersToEverything(Predicate<AstroObject> shouldAddDynamicFluidSystem)
+    public static void AddCollidersToEverything(Predicate<AstroObject> shouldAddDynamicFluidSystem, Func<AstroObject, float> getDensityMultiplier, Func<AstroObject, float> getDragMultiplier)
     {
         foreach (var astro in Object.FindObjectsOfType<AstroObject>())
         {
             if (astro._gravityVolume != null)
             {
                 float radius = astro._gravityVolume._upperSurfaceRadius;
-                AddSphereDetectorToBody(astro.gameObject, radius, shouldAddDynamicFluidSystem(astro));
+                AddSphereDetectorToBody(astro.gameObject, radius, shouldAddDynamicFluidSystem(astro), getDensityMultiplier(astro), getDragMultiplier(astro));
             }
         }
     }
@@ -125,9 +128,9 @@ public static class FixPlanets
         pointer.EmberTwin = emberTwinBody;
         pointer.SandFunnel = sandFunnelBody;
         // Tweak these
-        pointer.DistanceScaleFactor = 0.002f;
+        pointer.DistanceScaleFactor = 0.00211f;
         pointer.DistanceScaleOffset = 0f;
-        pointer.DistancePositionFactor = 0.062f;
+        pointer.DistancePositionFactor = 0.059f;
     }
 
     private static void FixVolcanicMoon(string destructionVolumePath)
@@ -183,7 +186,7 @@ public static class FixPlanets
     {
         AddSphereDetectorToBody(SearchUtilities.Find(bodyPath), radius, useDynamicFluidDetection);
     }
-    private static void AddSphereDetectorToBody(GameObject body, float radius, bool useDynamicFluidDetector = false)
+    private static void AddSphereDetectorToBody(GameObject body, float radius, bool useDynamicFluidDetector = false, float densityMultiplier = 1, float dragMultiplier = 1)
     {
         var detectorLayer = LayerMask.NameToLayer("BasicDetector");
         GameObject detectorLayerObject = null;
@@ -236,14 +239,66 @@ public static class FixPlanets
             if (fluidDetector == null)
             {
                 fluidDetector = detectorLayerObject.AddComponent<DynamicFluidDetector>();
-                fluidDetector._dontApplyForces = false;
+                fluidDetector._buoyancy.boundingRadius = radius;
+                // Make sure our drag curve makes sense, copy an island...
+                CopyIslandBuoyancyTo(fluidDetector);
+                fluidDetector._buoyancy.density *= densityMultiplier;
+                fluidDetector._dragFactor *= dragMultiplier;
             }
+            fluidDetector._dontApplyForces = false;
             fluidDetector._collider = collider;
             forceApplier._fluidDetector = fluidDetector;
             forceApplier._applyFluids = true;
-            fluidDetector._buoyancy.boundingRadius = radius;
-            // Make sure our drag curve makes sense, copy an island...
-            CopyIslandBuoyancyTo(fluidDetector);
+
+            if (detectorLayerObject.GetComponent<OceanSplasher>() == null)
+            {
+                AddSplasher(fluidDetector, radius);
+            }
+
+            // Make Volcanic moon lose its volcanic shell for funsies after landing in the water (JANK HARDCODED FIX)
+            if (detectorLayerObject.name == "FieldDetector_VM")
+            {
+                fluidDetector.OnEnterFluidType += type =>
+                {
+                    if (type == FluidVolume.Type.WATER)
+                    {
+                        MiscFun.FadeOutVolcanicMoon(detectorLayerObject.GetAttachedOWRigidbody());
+                    }
+                };
+            }
+        }
+    }
+
+    private static void AddSplasher(DynamicFluidDetector fluidDetector, float radius)
+    {
+        if (fluidDetector.GetComponent<OceanSplasher>() == null)
+        {
+            if (_gdOceanEffect == null)
+            {
+                _gdOceanEffect = SearchUtilities.Find("GiantsDeep_Body/Sector_GD/Sector_GDInterior/Ocean_GD")
+                    .GetComponent<OceanEffectController>();
+            }
+            if (_referenceFluidSplash == null)
+            {
+                _referenceFluidSplash = SearchUtilities.Find("StatueIsland_Body/Detector_StatueIsland")
+                    .GetComponent<FluidDetector>();
+            }
+            OceanSplasher splasher = fluidDetector.gameObject.AddComponent<OceanSplasher>();
+            splasher._ocean = _gdOceanEffect;
+            splasher._splashRadius = 2 * radius + 100;
+            splasher._splashLength = 10;
+            splasher._waveHeight = 20;
+            splasher._splashWidth = 20;
+
+            if (fluidDetector._splashEffects == null || fluidDetector._splashEffects.Length == 0)
+            {
+                fluidDetector._splashEffects = _referenceFluidSplash._splashEffects;
+            }
+
+            if (fluidDetector._splashSpawnRoot == null)
+            {
+                fluidDetector._splashSpawnRoot = fluidDetector.transform;
+            }
         }
     }
 
@@ -315,10 +370,7 @@ public static class FixPlanets
         // Match the 
         CopyIslandBuoyancyTo(dynamicFluidDetector);
 
-        
-        var upperForceApplier = constantDetectors.GetComponent<ForceApplier>();
-        upperForceApplier._fluidDetector = dynamicFluidDetector;
-        upperForceApplier._applyFluids = true;
+        AddSplasher(dynamicFluidDetector, shape.radius * 3f);
     }
 
     private static void FixSatelliteSector(string satelliteSectorPath, string parentStreamingGroupPath,
@@ -504,19 +556,65 @@ public static class FixPlanets
 
     [HarmonyPatch(typeof(DestructionVolume), "Vanish")]
     [HarmonyPrefix]
-    private static void DoNotDestroyPlanets(ref bool __runOriginal, OWRigidbody bodyToVanish)
+    private static void DoNotDestroyPlanets(ref bool __runOriginal, DestructionVolume __instance, OWRigidbody bodyToVanish, RelativeLocationData entryLocation)
     {
-        // Meteors immediately get destroyed from hollow's lantern itself
+        // Fix Meteors immediately getting destroyed from hollow's lantern itself
         if (bodyToVanish.GetComponent<AstroObject>() != null || bodyToVanish.GetComponent<MeteorController>() != null)
         {
             __runOriginal = false;
         }
+
+        // If we or the ship are dark bramble and we hit the SUN, kill the player or the ship.
+        if (__instance.GetAttachedOWRigidbody().gameObject.name == "Sun_Body" &&
+            bodyToVanish.gameObject.name == "DarkBramble_Body")
+        {
+            foreach (var outerWarp in Locator._outerFogWarps)
+            {
+                var trigger = outerWarp.GetComponentInParent<OWTriggerVolume>();
+                bool playerInsideDarkBramble =
+                    trigger._trackedObjects.Any(detector => detector.name == "PlayerDetector");
+                bool shipInsideDarkBramble =
+                    trigger._trackedObjects.Any(detector => detector.name == "ShipDetector");
+                if (playerInsideDarkBramble)
+                {
+                    Locator.GetDeathManager().KillPlayer(__instance._deathType);
+                }
+                else if (shipInsideDarkBramble)
+                {
+                    // TODO: JANK UGLY CODE, PLS FIX: Use the function copy to just call the normal version of this function
+                    bodyToVanish.gameObject.SetActive(value: false);
+                    ReferenceFrameTracker component = Locator.GetPlayerBody().GetComponent<ReferenceFrameTracker>();
+                    if (component.GetReferenceFrame() != null &&
+                        component.GetReferenceFrame().GetOWRigidBody() == bodyToVanish)
+                    {
+                        component.UntargetReferenceFrame();
+                    }
+
+                    MapMarker component2 = bodyToVanish.GetComponent<MapMarker>();
+                    if (component2 != null)
+                    {
+                        component2.DisableMarker();
+                    }
+
+                    GlobalMessenger.FireEvent("ShipDestroyed");
+                }
+
+            }
+        }
     }
 
-    [HarmonyPatch(typeof(MeteorController), "Initialize")]
+    [HarmonyPatch(typeof(MeteorController), "Launch")]
     [HarmonyPostfix]
     private static void FixMeteorOnInit(MeteorController __instance)
     {
+        // For initialization reasons and because I am lazy (:
+        __instance.StartCoroutine(FixMeteorDelayed(__instance));
+    }
+
+    private static IEnumerator FixMeteorDelayed(MeteorController __instance)
+    {
+        yield return null;
+        yield return null;
         FixHollowLanternMeteor(__instance);
     }
 
@@ -544,6 +642,34 @@ public static class FixPlanets
         PreventDoubleCountingForces(__instance);
     }
 
+    [HarmonyPatch(typeof(FluidDetector), "AccumulateFluidAcceleration")]
+    [HarmonyPrefix]
+    private static void DontApplyWaterfallsToMoons(FluidDetector __instance)
+    {
+        // The attlerock gets stuck inside timber hearth due to waterfalls pushing it down
+        __instance._activeVolumes = __instance._activeVolumes.Where(v =>
+        {
+            if (v is FluidVolume volume)
+            {
+                if (volume.gameObject.name.ToLower().Contains("waterfall"))
+                {
+                    return false;
+                }
+
+                return true;
+            }
+
+            return true;
+        }).ToList();
+    }
+
+    [HarmonyPatch(typeof(FluidDetector), "SpawnSplash")]
+    [HarmonyPrefix]
+    private static void AlignSplash(FluidDetector __instance)
+    {
+        // TODO: Do the alignment, base it on the parent body's ocean radius or something idk
+    }
+
     private class JankShapeFixer : MonoBehaviour
     {
         private void Update()
@@ -569,6 +695,23 @@ public static class FixPlanets
         public float DistancePositionOffset;
         public float DistancePositionFactor;
 
+        private OWRigidbody _owrb;
+
+        private Vector3 _prevPosition;
+        private Quaternion _prevRotation;
+
+        private void Start()
+        {
+            _owrb = SandFunnel.GetComponent<OWRigidbody>();
+            _prevPosition = SandFunnel.transform.position;
+            _prevRotation = SandFunnel.transform.rotation;
+            if (_owrb != null)
+            {
+                _owrb._currentVelocity = Vector3.zero;
+                _owrb._currentAngularVelocity = Vector3.zero;
+            }
+        }
+
         private void Update()
         {
             if (SandFunnel != null && AshTwin != null && EmberTwin != null)
@@ -581,6 +724,17 @@ public static class FixPlanets
                 var scale = SandFunnel.transform.localScale;
                 scale.z = DistanceScaleOffset + delta.magnitude * DistanceScaleFactor;
                 SandFunnel.transform.localScale = scale;
+
+                if (_owrb != null && Time.deltaTime > 0)
+                {
+                    _owrb._rigidbody.velocity = (SandFunnel.transform.position - _prevPosition) / Time.deltaTime; 
+                    _owrb._currentVelocity = _owrb._rigidbody.velocity;
+                    _owrb._rigidbody.angularVelocity = (SandFunnel.transform.rotation * Quaternion.Inverse(_prevRotation)).eulerAngles / Time.deltaTime; 
+                    _owrb._currentAngularVelocity = _owrb._rigidbody.angularVelocity;
+                }
+
+                _prevPosition = SandFunnel.transform.position;
+                _prevRotation = SandFunnel.transform.rotation;
             }
         }
     }

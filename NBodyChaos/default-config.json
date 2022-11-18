@@ -21,6 +21,20 @@
       "min": 0.2,
       "max": 1.4,
       "title": "Sun Gravity Multiplier (Start of loop only)"
+    },
+    "randomizePlanetMassPercent" : {
+      "type": "slider",
+      "value": "0",
+      "min": 0,
+      "max": 1,
+      "title": "Randomize Planet Gravity after spawn %"
+    },
+    "randomizePlanetVelocityPercent" : {
+      "type": "slider",
+      "value": "0",
+      "min": 0,
+      "max" : 2,
+      "title": "Randomize Planet Velocity after spawn %"
     }
   }
 }

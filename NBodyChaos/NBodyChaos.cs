@@ -16,6 +16,8 @@ public class NBodyChaos : ModBehaviour
     private static bool _useSunGravity = true;
     public static float SunSpawnGravityExponent { get; private set; } = 2;
     public static float SunSpawnGravityMultiplier { get; private set; } = 1;
+    public static float RandomizePlanetMassPercent { get; private set; } = 1;
+    public static float RandomizePlanetVelocityPercent { get; private set; } = 1;
 
     private void Awake()
     {
@@ -64,6 +66,8 @@ public class NBodyChaos : ModBehaviour
         }
         SunSpawnGravityExponent = config.GetSettingsValue<float>("sunSpawnGravityExponent");
         SunSpawnGravityMultiplier = config.GetSettingsValue<float>("sunSpawnGravityMultiplier");
+        RandomizePlanetMassPercent = config.GetSettingsValue<float>("randomizePlanetMassPercent");
+        RandomizePlanetVelocityPercent = config.GetSettingsValue<float>("randomizePlanetVelocityPercent");
     }
     
     private void ApplyNBodiesAllPlanets()
@@ -88,12 +92,21 @@ public class NBodyChaos : ModBehaviour
         FixPlanets.AddDynamicSphereDetectorToBody("OrbitalProbeCannon_Body", 8, true);
         FixPlanets.AddDynamicSphereDetectorToBody("CannonBarrel_Body", 5, true);
         FixPlanets.AddDynamicSphereDetectorToBody("CannonMuzzle_Body", 5, true);
+        // This one already has a detector, but we want to add a splasher 
+        FixPlanets.AddDynamicSphereDetectorToBody("QuantumIsland_Body", 50, true);
 
         // Makes moons and other things fall in black holes and... fun stuff I guarantee it
-        FixPlanets.AddCollidersToEverything(astro => astro._type == AstroObject.Type.Moon || astro._type == AstroObject.Type.Satellite ||
-                                                     astro._type == AstroObject.Type.SpaceStation);
+        FixPlanets.AddCollidersToEverything(
+            astro => astro._type == AstroObject.Type.Moon || astro._type == AstroObject.Type.Satellite ||
+                                                     astro._type == AstroObject.Type.SpaceStation,
+            astro => 0.7f,
+            astro => 0.9f
+            );
         
         // Makes the sand funnel ALWAYS point from ash twin to ember twin.... no matter what...
         FixPlanets.FixAshTwinSand("TowerTwin_Body", "CaveTwin_Body", "SandFunnel_Body");
+
+        // Randomization! for fun!
+        RandomizePlanets.RandomizePlanetBehavior(RandomizePlanetMassPercent, RandomizePlanetVelocityPercent);
     }
 }
